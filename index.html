@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RomBooking – Arbeidsplassen</title>
-  <meta name="description" content="En enkel rombooking-side med 5 økter per dag, egne kalendere per rom, støtte for gjentakende bookinger og uke-/uketallsvisning. Delbar i Teams som ren HTML-fil." />
+  <meta name="description" content="Rombooking med 5 økter per dag, egne kalendere per rom, gjentakende bookinger og uke-/uketallsvisning. Kan deles i Teams." />
   <style>
     :root{
       --bg: #0b1020;
@@ -13,11 +13,7 @@
       --muted:#9aa3b2;
       --text:#eaf0ff;
       --accent:#6ea8ff;
-      --accent-2:#8be9c7;
       --danger:#ff6b6b;
-      --ok:#2ecc71;
-      --warn:#f0d264;
-      --grid:#223056;
       --shadow: 0 10px 30px rgba(0,0,0,.35);
     }
     *{box-sizing:border-box}
@@ -30,14 +26,13 @@
     .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:14px}
     .tabs{display:flex;gap:6px;flex-wrap:wrap}
     .tab{padding:10px 12px;border-radius:10px;background:var(--panel);border:1px solid rgba(255,255,255,.06);cursor:pointer;color:var(--text);transition:.2s;box-shadow:var(--shadow)}
-    .tab:hover{transform:translateY(-1px);}    
+    .tab:hover{transform:translateY(-1px)}
     .tab.active{background:linear-gradient(180deg,#12224a,#101a38);border-color:#2b4c89}
 
     .spacer{flex:1}
     .btn{appearance:none;border:none;border-radius:10px;padding:10px 12px;background:var(--panel);color:var(--text);cursor:pointer;border:1px solid rgba(255,255,255,.08);transition:.2s;box-shadow:var(--shadow)}
     .btn:hover{transform:translateY(-1px)}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
-    .btn.primary{background:linear-gradient(180deg,#214b99,#1a3b78);border-color:#2b64c9}
     .btn.danger{background:linear-gradient(180deg,#7a2230,#5e1a25);border-color:#a33}
     .btn.toggle[aria-pressed="true"]{outline:2px solid #2b64c9}
 
@@ -71,7 +66,6 @@
 
     .foot{color:var(--muted);font-size:12px;text-align:center;margin:20px 0}
     .pill{display:inline-block;padding:4px 8px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(255,255,255,.04)}
-    .warning{color:#ffdca8}
     .roomtitle{font-weight:600}
 
     @media (max-width: 900px){
@@ -159,9 +153,13 @@
 </dialog>
 
 <div class="foot">
-  Laget for deling i Teams. <span class="small">Versjon 1.0 · Lokal lagring · Tidssone: <span id="tz"></span></span>
+  Laget for deling i Teams. <span class="small">Versjon 1.0 · Lokal/Firebase lagring · Tidssone: <span id="tz"></span></span>
 </div>
 
+<!-- Firebase (CDN compat) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <script>
 (() => {
   // --- Konfig ---
@@ -170,8 +168,19 @@
   ];
   const NUM_SESSIONS = 5; // 1.–5. økt
   const MAX_DATE = new Date("2026-06-28T23:59:59");
-  const STORAGE_KEY = "rombooking.v1"; // lokal lagring
+  const STORAGE_KEY = "rombooking.v1"; // lokal fallback
   const FOLLOW_KEY = "rombooking.followWeek";
+
+  // 🔌 Felles lagring via Firebase – din konfig:
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDQTUj59sCUn9Koh8MTs8MZf0TdlnfE8SY",
+    authDomain: "booking-f55c3.firebaseapp.com",
+    projectId: "booking-f55c3",
+    appId: "1:90445185171:web:7cc06467ca6d78e704f026"
+  };
+
+  let USE_FIREBASE = !!FIREBASE_CONFIG.apiKey && !String(FIREBASE_CONFIG.apiKey).startsWith('YOUR_');
+  let db=null; let unsubscribe=null;
 
   // --- Hjelpefunksjoner ---
   const clampToMax = (d)=> d>MAX_DATE ? new Date(MAX_DATE) : d;
@@ -179,7 +188,6 @@
   const toISODate = (d)=> `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   const fromISODate = (s)=> { const [y,m,dd] = s.split('-').map(Number); return new Date(y, m-1, dd); };
 
-  // ISO uke (uke # og mandag som start)
   function getISOWeek(d){
     const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNum = (date.getUTCDay() + 6) % 7; // 0=mandag
@@ -195,21 +203,16 @@
     date.setHours(0,0,0,0);
     return date;
   }
-
   const weekdayNames = ["Man","Tir","Ons","Tor","Fre","Lør","Søn"];
 
-  // --- Lagring ---
-  function loadState(){
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; }
-  }
-  function saveState(state){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }
+  // --- Lokal lagring fallback ---
+  function loadState(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; } }
+  function saveState(s){ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
 
   let state = loadState();
   ROOMS.forEach(r=>{ if(!state[r]) state[r] = {}; });
 
-  // --- UI referanser ---
+  // --- UI refs ---
   const roomTabs = document.getElementById('roomTabs');
   const calendar = document.getElementById('calendar');
   const weekTitle = document.getElementById('weekTitle');
@@ -236,7 +239,16 @@
 
   tz.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  // --- Rom-tabs ---
+  // --- Firebase init ---
+  if(USE_FIREBASE){
+    try{
+      firebase.initializeApp(FIREBASE_CONFIG);
+      db = firebase.firestore();
+      firebase.auth().signInAnonymously().catch(e=>{ console.error('Auth feilet', e); USE_FIREBASE=false; });
+    } catch(e){ console.error('Init Firebase feilet', e); USE_FIREBASE=false; }
+  }
+
+  // --- Tabs ---
   let currentRoom = ROOMS[0];
   function renderTabs(){
     roomTabs.innerHTML = '';
@@ -244,36 +256,18 @@
       const b = document.createElement('button');
       b.className = 'tab' + (r===currentRoom? ' active':'');
       b.textContent = r;
-      b.onclick = ()=>{ currentRoom = r; renderTabs(); renderWeek(); };
+      b.onclick = ()=>{ currentRoom = r; renderTabs(); renderWeek(); subscribeToWeek(); };
       roomTabs.appendChild(b);
     });
   }
 
-  // --- Uke-navigasjon + automatisk nå-uke ---
+  // --- Uke + auto-følg ---
   let currentMonday = startOfISOWeek(new Date());
-  let followWeek = (()=>{
-    try { const v = localStorage.getItem(FOLLOW_KEY); return v==null ? true : v==='true'; } catch { return true; }
-  })();
-  function setFollowWeek(v){
-    followWeek = v; localStorage.setItem(FOLLOW_KEY, String(v));
-    renderFollowBtn();
-  }
-  function renderFollowBtn(){
-    followBtn.setAttribute('aria-pressed', String(followWeek));
-    followBtn.textContent = followWeek ? 'Følg nå-uke' : 'Lås uke';
-  }
-  function jumpToCurrentWeek(){
-    currentMonday = startOfISOWeek(new Date());
-    renderWeek();
-  }
-  function tickFollow(){
-    if(!followWeek) return;
-    const nowMonday = startOfISOWeek(new Date());
-    if(toISODate(nowMonday)!==toISODate(currentMonday)){
-      currentMonday = nowMonday;
-      renderWeek();
-    }
-  }
+  let followWeek = (()=>{ try { const v = localStorage.getItem(FOLLOW_KEY); return v==null ? true : v==='true'; } catch { return true; } })();
+  function setFollowWeek(v){ followWeek=v; localStorage.setItem(FOLLOW_KEY,String(v)); renderFollowBtn(); }
+  function renderFollowBtn(){ followBtn.setAttribute('aria-pressed', String(followWeek)); followBtn.textContent = followWeek ? 'Følg nå-uke' : 'Lås uke'; }
+  function jumpToCurrentWeek(){ currentMonday = startOfISOWeek(new Date()); renderWeek(); subscribeToWeek(); }
+  function tickFollow(){ if(!followWeek) return; const nowMon = startOfISOWeek(new Date()); if(toISODate(nowMon)!==toISODate(currentMonday)){ currentMonday=nowMon; renderWeek(); subscribeToWeek(); } }
 
   function renderWeek(){
     const week = getISOWeek(currentMonday);
@@ -281,8 +275,7 @@
     const end = new Date(currentMonday); end.setDate(end.getDate()+6);
     weekRange.textContent = `${currentMonday.toLocaleDateString('no-NO',{day:'2-digit',month:'2-digit'})} – ${end.toLocaleDateString('no-NO',{day:'2-digit',month:'2-digit'})}`;
 
-    const head = document.createElement('div');
-    head.className = 'cal-head';
+    const head = document.createElement('div'); head.className='cal-head';
     const first = document.createElement('div'); first.className='headcell'; first.textContent='Økt / Dag'; head.appendChild(first);
     for(let i=0;i<7;i++){
       const d = new Date(currentMonday); d.setDate(d.getDate()+i);
@@ -294,18 +287,12 @@
 
     const rows = [];
     for(let s=1; s<=NUM_SESSIONS; s++){
-      const row = document.createElement('div');
-      row.className = 'cal-row';
-      const label = document.createElement('div');
-      label.className = 'cell slotlabel';
-      label.innerHTML = `<strong>${s}. økt</strong>`;
-      row.appendChild(label);
+      const row = document.createElement('div'); row.className='cal-row';
+      const label = document.createElement('div'); label.className='cell slotlabel'; label.innerHTML = `<strong>${s}. økt</strong>`; row.appendChild(label);
       for(let i=0;i<7;i++){
         const d = new Date(currentMonday); d.setDate(d.getDate()+i);
-        const cell = document.createElement('div');
-        cell.className = 'cell';
-        cell.dataset.date = toISODate(d);
-        cell.dataset.session = s;
+        const cell = document.createElement('div'); cell.className='cell';
+        cell.dataset.date = toISODate(d); cell.dataset.session = s;
         const b = getBooking(currentRoom, cell.dataset.date, s);
         updateCell(cell, b);
         cell.onclick = ()=> openBooking(cell.dataset.date, s);
@@ -321,63 +308,65 @@
     jumpDate.value = toISODate(currentMonday);
   }
 
-  function nextWeek(){ setFollowWeek(false); currentMonday.setDate(currentMonday.getDate()+7); renderWeek(); }
-  function prevWeek(){ setFollowWeek(false); currentMonday.setDate(currentMonday.getDate()-7); renderWeek(); }
-
-  prevWeekBtn.onclick = prevWeek;
-  nextWeekBtn.onclick = nextWeek;
-  jumpDate.onchange = (e)=>{
-    setFollowWeek(false);
-    const d = fromISODate(e.target.value);
-    currentMonday = startOfISOWeek(d);
-    renderWeek();
-  };
-  followBtn.onclick = ()=>{
-    if(followWeek){ setFollowWeek(false); }
-    else { setFollowWeek(true); jumpToCurrentWeek(); }
-  };
+  prevWeekBtn.onclick = ()=>{ setFollowWeek(false); currentMonday.setDate(currentMonday.getDate()-7); renderWeek(); subscribeToWeek(); };
+  nextWeekBtn.onclick = ()=>{ setFollowWeek(false); currentMonday.setDate(currentMonday.getDate()+7); renderWeek(); subscribeToWeek(); };
+  jumpDate.onchange = (e)=>{ setFollowWeek(false); currentMonday = startOfISOWeek(fromISODate(e.target.value)); renderWeek(); subscribeToWeek(); };
+  followBtn.onclick = ()=>{ if(followWeek){ setFollowWeek(false); } else { setFollowWeek(true); jumpToCurrentWeek(); } };
 
   // --- Bookinger ---
-  function getBooking(room, dateStr, session){
-    return state[room]?.[dateStr]?.[session] || null;
+  function getBooking(room, dateStr, session){ return state[room]?.[dateStr]?.[session] || null; }
+  function setBookingLocal(room, dateStr, session, booking){ if(!state[room]) state[room]={}; if(!state[room][dateStr]) state[room][dateStr]={}; if(booking) state[room][dateStr][session]=booking; else delete state[room][dateStr][session]; saveState(state); }
+
+  async function setBooking(room, dateStr, session, booking){
+    if(USE_FIREBASE && db){
+      const id = `${room}|${dateStr}|${session}`;
+      const ref = db.collection('bookings').doc(id);
+      if(booking){ await ref.set({ room, date: dateStr, session: Number(session), teacher: booking.teacher||'', title: booking.title||'', updatedAt: Date.now() }, { merge:true }); }
+      else { await ref.delete(); }
+    } else {
+      setBookingLocal(room, dateStr, session, booking);
+    }
   }
-  function setBooking(room, dateStr, session, booking){
-    if(!state[room]) state[room] = {};
-    if(!state[room][dateStr]) state[room][dateStr] = {};
-    if(booking) state[room][dateStr][session] = booking; else delete state[room][dateStr][session];
-    saveState(state);
-  }
+
   function updateCell(cell, booking){
     cell.innerHTML = '';
     if(booking){
       cell.dataset.booked = 'true';
-      const el = document.createElement('div');
-      el.className = 'booking';
-      el.innerHTML = `<div class="title">${escapeHtml(booking.title || 'Booket')}</div>
-                      <div class="meta">${escapeHtml(booking.teacher || '')}</div>`;
+      const el = document.createElement('div'); el.className='booking';
+      el.innerHTML = `<div class="title">${escapeHtml(booking.title || 'Booket')}</div><div class="meta">${escapeHtml(booking.teacher || '')}</div>`;
       cell.appendChild(el);
-    } else {
-      cell.dataset.booked = 'false';
-    }
+    } else { cell.dataset.booked='false'; }
+  }
+
+  function subscribeToWeek(){
+    if(unsubscribe){ unsubscribe(); unsubscribe=null; }
+    if(!(USE_FIREBASE && db)) return;
+    const start = toISODate(currentMonday); const endD = new Date(currentMonday); endD.setDate(endD.getDate()+6); const end = toISODate(endD);
+    unsubscribe = db.collection('bookings')
+      .where('room','==', currentRoom)
+      .where('date','>=', start)
+      .where('date','<=', end)
+      .onSnapshot(snap => {
+        // Rensk uke for valgt rom, fyll med snapshot
+        state[currentRoom] = {};
+        snap.forEach(doc => { const b = doc.data(); if(!state[currentRoom][b.date]) state[currentRoom][b.date]={}; state[currentRoom][b.date][b.session] = { teacher:b.teacher, title:b.title }; });
+        renderWeek();
+      }, err => console.error('Firestore listener error', err));
   }
 
   // --- Modal ---
-  let active = null; // {room,dateStr,session}
+  let active=null; // {room,dateStr,session}
   function openBooking(dateStr, session){
-    const date = fromISODate(dateStr);
-    if(date>MAX_DATE){ alert('Kan ikke booke etter 28.06.2026'); return; }
+    const date = fromISODate(dateStr); if(date>MAX_DATE){ alert('Kan ikke booke etter 28.06.2026'); return; }
     active = {room: currentRoom, dateStr, session};
     modalRoom.textContent = currentRoom;
-    const week = getISOWeek(date);
-    const dayName = weekdayNames[(date.getDay()+6)%7];
+    const week = getISOWeek(date); const dayName = weekdayNames[(date.getDay()+6)%7];
     modalWhen.textContent = `${dayName} ${date.toLocaleDateString('no-NO')} • ${session}. økt • Uke ${week}`;
 
     const existing = getBooking(currentRoom, dateStr, session);
     teacherInput.value = existing?.teacher || '';
     titleInput.value = existing?.title || '';
-    repeatSel.value = 'none';
-    repeatUntilWrap.style.display = 'none';
-    repeatUntil.value = '';
+    repeatSel.value = 'none'; repeatUntilWrap.style.display='none'; repeatUntil.value='';
 
     deleteBtn.style.display = existing ? 'inline-flex' : 'none';
 
@@ -386,138 +375,74 @@
   function closeBooking(){ bookingDialog.close(); }
   closeDialogBtn.onclick = closeBooking;
 
-  repeatSel.onchange = ()=>{
-    if(repeatSel.value==='none'){ repeatUntilWrap.style.display='none'; }
-    else { repeatUntilWrap.style.display='flex'; }
-  };
+  repeatSel.onchange = ()=>{ repeatUntilWrap.style.display = (repeatSel.value==='none') ? 'none':'flex'; };
 
-  saveBtn.onclick = ()=>{
+  saveBtn.onclick = async ()=>{
     if(!active) return;
-    const teacher = teacherInput.value.trim();
-    if(!teacher){ alert('Skriv inn lærer'); return; }
-    const title = titleInput.value.trim();
-    const baseDate = fromISODate(active.dateStr);
-    const repeat = repeatSel.value;
-    let until = repeatUntil.value ? clampToMax(new Date(repeatUntil.value)) : MAX_DATE;
+    const teacher = teacherInput.value.trim(); if(!teacher){ alert('Skriv inn lærer'); return; }
+    const title = titleInput.value.trim(); const baseDate = fromISODate(active.dateStr);
+    const repeat = repeatSel.value; let until = repeatUntil.value ? clampToMax(new Date(repeatUntil.value)) : MAX_DATE;
 
     const booking = { teacher, title };
-
     const stepDays = repeat==='weekly' ? 7 : (repeat==='biweekly' ? 14 : 0);
 
-    if(stepDays===0){
-      setBooking(active.room, active.dateStr, active.session, booking);
-    } else {
-      let d = new Date(baseDate);
-      while(d <= until){
-        const ds = toISODate(d);
-        setBooking(active.room, ds, active.session, booking);
-        d.setDate(d.getDate()+stepDays);
-      }
-    }
+    if(stepDays===0){ await setBooking(active.room, active.dateStr, active.session, booking); }
+    else { let d = new Date(baseDate); while(d<=until){ const ds = toISODate(d); await setBooking(active.room, ds, active.session, booking); d.setDate(d.getDate()+stepDays); } }
 
-    renderWeek();
-    closeBooking();
+    renderWeek(); closeBooking();
   };
 
-  deleteBtn.onclick = ()=>{
-    if(!active) return;
-    const existing = getBooking(active.room, active.dateStr, active.session);
-    if(!existing){ closeBooking(); return; }
-
+  deleteBtn.onclick = async ()=>{
+    if(!active) return; const existing = getBooking(active.room, active.dateStr, active.session); if(!existing){ closeBooking(); return; }
     const applySeries = confirm('Slette kun denne økten? (OK)\n\nVelg Avbryt for å slette serien (samme ukedag/økt framover).');
-    if(applySeries){
-      setBooking(active.room, active.dateStr, active.session, null);
-    } else {
-      const baseDate = fromISODate(active.dateStr);
-      let d = new Date(baseDate);
-      while(d <= MAX_DATE){
-        const ds = toISODate(d);
-        setBooking(active.room, ds, active.session, null);
-        d.setDate(d.getDate()+7);
-      }
-    }
-    renderWeek();
-    closeBooking();
+    if(applySeries){ await setBooking(active.room, active.dateStr, active.session, null); }
+    else { const baseDate = fromISODate(active.dateStr); let d = new Date(baseDate); while(d<=MAX_DATE){ const ds = toISODate(d); await setBooking(active.room, ds, active.session, null); d.setDate(d.getDate()+7); } }
+    renderWeek(); closeBooking();
   };
 
-  // --- Eksport til .ics (for valgt rom) ---
+  // --- Eksport til .ics ---
   exportBtn.onclick = ()=>{
     const ics = buildICSForRoom(currentRoom);
     const blob = new Blob([ics], {type:'text/calendar'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${currentRoom.replace(/\s+/g,'_')}.ics`;
-    a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${currentRoom.replace(/\s+/g,'_')}.ics`; a.click();
   };
 
   // --- Tøm rom ---
-  clearBtn.onclick = ()=>{
-    if(confirm(`Tøm ALLE bookinger for «${currentRoom}»?`)){
-      state[currentRoom] = {};
-      saveState(state);
-      renderWeek();
-    }
+  clearBtn.onclick = async ()=>{
+    if(!confirm(`Tøm ALLE bookinger for «${currentRoom}»?`)) return;
+    if(USE_FIREBASE && db){
+      const snap = await db.collection('bookings').where('room','==', currentRoom).get();
+      const batch = db.batch(); snap.forEach(doc=> batch.delete(doc.ref)); await batch.commit();
+    } else { state[currentRoom] = {}; saveState(state); }
+    renderWeek();
   };
 
   function buildICSForRoom(room){
-    const lines = [
-      'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//RomBooking//NO','CALSCALE:GREGORIAN'
-    ];
+    const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//RomBooking//NO','CALSCALE:GREGORIAN'];
     const data = state[room] || {};
     for(const dateStr of Object.keys(data)){
       for(const session of Object.keys(data[dateStr])){
-        const b = data[dateStr][session];
-        if(!b) continue;
-        const uid = `${room}-${dateStr}-s${session}-${Math.random().toString(36).slice(2)}@rombooking`;
+        const b = data[dateStr][session]; if(!b) continue; const uid = `${room}-${dateStr}-s${session}-${Math.random().toString(36).slice(2)}@rombooking`;
         const dt = fromISODate(dateStr);
-        const times = [
-          ['08:15','09:45'],
-          ['10:00','11:30'],
-          ['11:45','13:15'],
-          ['13:30','15:00'],
-          ['15:15','16:45'],
-        ];
+        const times = [['08:15','09:45'],['10:00','11:30'],['11:45','13:15'],['13:30','15:00'],['15:15','16:45']];
         const [start,end] = times[Number(session)-1];
         const dtStart = new Date(dt); const [sh,sm]=start.split(':').map(Number); dtStart.setHours(sh,sm,0,0);
         const dtEnd   = new Date(dt); const [eh,em]=end.split(':').map(Number); dtEnd.setHours(eh,em,0,0);
-
         const fmtICS = (d)=> d.toISOString().replace(/[-:]/g,'').replace(/\..+/, 'Z');
         const summary = (b.title? `${b.title} – `:'') + `${room}`;
-
-        lines.push('BEGIN:VEVENT');
-        lines.push('UID:'+uid);
-        lines.push('DTSTAMP:'+fmtICS(new Date()));
-        lines.push('DTSTART:'+fmtICS(dtStart));
-        lines.push('DTEND:'+fmtICS(dtEnd));
-        lines.push('SUMMARY:'+escapeICS(summary));
-        lines.push('DESCRIPTION:'+escapeICS(`Lærer: ${b.teacher || ''}`));
-        lines.push('END:VEVENT');
+        lines.push('BEGIN:VEVENT','UID:'+uid,'DTSTAMP:'+fmtICS(new Date()),'DTSTART:'+fmtICS(dtStart),'DTEND:'+fmtICS(dtEnd),'SUMMARY:'+escapeICS(summary),'DESCRIPTION:'+escapeICS(`Lærer: ${b.teacher || ''}`),'END:VEVENT');
       }
     }
-    lines.push('END:VCALENDAR');
-    return lines.join('\r\n');
+    lines.push('END:VCALENDAR'); return lines.join('\r\n');
   }
 
-  // --- Render init ---
-  renderTabs();
-  renderFollowBtn();
-  renderWeek();
-
-  // Oppdater automatisk når uke ruller over (og når fanen blir aktiv)
-  setInterval(tickFollow, 60*1000); // sjekk hvert minutt
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) tickFollow(); });
+  // --- Init ---
+  (function init(){ renderTabs(); renderFollowBtn(); renderWeek(); subscribeToWeek(); })();
+  setInterval(tickFollow, 60*1000); document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) tickFollow(); });
 
   // --- Utils ---
-  function escapeHtml(str){
-    return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m]));
-  }
-  function escapeICS(text){
-    return String(text||'')
-      .replace(/\\/g,'\\\\')
-      .replace(/\n/g,'\\n')
-      .replace(/,/g,'\\,')
-      .replace(/;/g,'\\;');
-  }
+  function escapeHtml(str){ return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
+  function escapeICS(text){ return String(text||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;'); }
 })();
 </script>
 </body>
