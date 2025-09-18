@@ -341,6 +341,28 @@
   function subscribeToWeek(){
     if(unsubscribe){ unsubscribe(); unsubscribe=null; }
     if(!(USE_FIREBASE && db)) return;
+    // Midlertidig/robust: hent alt for valgt rom og filtrer datoer lokalt
+    // Dette krever IKKE kompositt-indeks i Firestore.
+    const start = toISODate(currentMonday);
+    const endD = new Date(currentMonday); endD.setDate(endD.getDate()+6);
+    const end = toISODate(endD);
+
+    unsubscribe = db.collection('bookings')
+      .where('room','==', currentRoom)
+      .onSnapshot(snap => {
+        const weekData = {};
+        snap.forEach(doc => {
+          const b = doc.data();
+          if(b.date >= start && b.date <= end){
+            if(!weekData[b.date]) weekData[b.date] = {};
+            weekData[b.date][b.session] = { teacher: b.teacher, title: b.title };
+          }
+        });
+        state[currentRoom] = weekData;
+        renderWeek();
+      }, err => console.error('Firestore listener error', err));
+  }
+    if(!(USE_FIREBASE && db)) return;
     const start = toISODate(currentMonday); const endD = new Date(currentMonday); endD.setDate(endD.getDate()+6); const end = toISODate(endD);
     unsubscribe = db.collection('bookings')
       .where('room','==', currentRoom)
