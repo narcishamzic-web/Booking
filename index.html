@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RomBooking – Arbeidsplassen</title>
   <meta name="description" content="Rombooking med 5 økter per dag, egne kalendere per rom, gjentakende bookinger og uke-/uketallsvisning. Kan deles i Teams." />
+  <!-- v=4 -->
   <style>
     :root{
       --bg: #0b1020;
@@ -341,12 +342,10 @@
   function subscribeToWeek(){
     if(unsubscribe){ unsubscribe(); unsubscribe=null; }
     if(!(USE_FIREBASE && db)) return;
-    // Midlertidig/robust: hent alt for valgt rom og filtrer datoer lokalt
-    // Dette krever IKKE kompositt-indeks i Firestore.
+    // Robust: hent alt for valgt rom og filtrer ukeintervall lokalt (slipper composite index)
     const start = toISODate(currentMonday);
     const endD = new Date(currentMonday); endD.setDate(endD.getDate()+6);
     const end = toISODate(endD);
-
     unsubscribe = db.collection('bookings')
       .where('room','==', currentRoom)
       .onSnapshot(snap => {
@@ -359,19 +358,6 @@
           }
         });
         state[currentRoom] = weekData;
-        renderWeek();
-      }, err => console.error('Firestore listener error', err));
-  }
-    if(!(USE_FIREBASE && db)) return;
-    const start = toISODate(currentMonday); const endD = new Date(currentMonday); endD.setDate(endD.getDate()+6); const end = toISODate(endD);
-    unsubscribe = db.collection('bookings')
-      .where('room','==', currentRoom)
-      .where('date','>=', start)
-      .where('date','<=', end)
-      .onSnapshot(snap => {
-        // Rensk uke for valgt rom, fyll med snapshot
-        state[currentRoom] = {};
-        snap.forEach(doc => { const b = doc.data(); if(!state[currentRoom][b.date]) state[currentRoom][b.date]={}; state[currentRoom][b.date][b.session] = { teacher:b.teacher, title:b.title }; });
         renderWeek();
       }, err => console.error('Firestore listener error', err));
   }
@@ -416,7 +402,9 @@
 
   deleteBtn.onclick = async ()=>{
     if(!active) return; const existing = getBooking(active.room, active.dateStr, active.session); if(!existing){ closeBooking(); return; }
-    const applySeries = confirm('Slette kun denne økten? (OK)\n\nVelg Avbryt for å slette serien (samme ukedag/økt framover).');
+    const applySeries = confirm('Slette kun denne økten? (OK)
+
+Velg Avbryt for å slette serien (samme ukedag/økt framover).');
     if(applySeries){ await setBooking(active.room, active.dateStr, active.session, null); }
     else { const baseDate = fromISODate(active.dateStr); let d = new Date(baseDate); while(d<=MAX_DATE){ const ds = toISODate(d); await setBooking(active.room, ds, active.session, null); d.setDate(d.getDate()+7); } }
     renderWeek(); closeBooking();
@@ -455,7 +443,8 @@
         lines.push('BEGIN:VEVENT','UID:'+uid,'DTSTAMP:'+fmtICS(new Date()),'DTSTART:'+fmtICS(dtStart),'DTEND:'+fmtICS(dtEnd),'SUMMARY:'+escapeICS(summary),'DESCRIPTION:'+escapeICS(`Lærer: ${b.teacher || ''}`),'END:VEVENT');
       }
     }
-    lines.push('END:VCALENDAR'); return lines.join('\r\n');
+    lines.push('END:VCALENDAR'); return lines.join('
+');
   }
 
   // --- Init ---
@@ -463,8 +452,9 @@
   setInterval(tickFollow, 60*1000); document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) tickFollow(); });
 
   // --- Utils ---
-  function escapeHtml(str){ return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
-  function escapeICS(text){ return String(text||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;'); }
+  function escapeHtml(str){ return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',''':'&#39;'}[m])); }
+  function escapeICS(text){ return String(text||'').replace(/\/g,'\\').replace(/
+/g,'\n').replace(/,/g,'\,').replace(/;/g,'\;'); }
 })();
 </script>
 </body>
