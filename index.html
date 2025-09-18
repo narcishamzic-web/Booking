@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RomBooking – Arbeidsplassen</title>
   <meta name="description" content="Rombooking med 5 økter per dag, egne kalendere per rom, gjentakende bookinger og uke-/uketallsvisning. Kan deles i Teams." />
-  <!-- v=4 -->
   <style>
     :root{
       --bg: #0b1020;
@@ -180,7 +179,9 @@
     appId: "1:90445185171:web:7cc06467ca6d78e704f026"
   };
 
-  let USE_FIREBASE = !!FIREBASE_CONFIG.apiKey && !String(FIREBASE_CONFIG.apiKey).startsWith('YOUR_');
+  // TVING lokal modus for å få alt opp i drift igjen. Sett til false når vi vil teste Firebase på nytt.
+  const FORCE_LOCAL = true;
+  let USE_FIREBASE = !FORCE_LOCAL && !!FIREBASE_CONFIG.apiKey && !String(FIREBASE_CONFIG.apiKey).startsWith('YOUR_');
   let db=null; let unsubscribe=null;
 
   // --- Hjelpefunksjoner ---
@@ -241,12 +242,14 @@
   tz.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   // --- Firebase init ---
-  if(USE_FIREBASE){
+  if(USE_FIREBASE && window.firebase){
     try{
       firebase.initializeApp(FIREBASE_CONFIG);
       db = firebase.firestore();
       firebase.auth().signInAnonymously().catch(e=>{ console.error('Auth feilet', e); USE_FIREBASE=false; });
     } catch(e){ console.error('Init Firebase feilet', e); USE_FIREBASE=false; }
+  } else {
+    USE_FIREBASE = false; // sikker fallback
   }
 
   // --- Tabs ---
@@ -342,10 +345,12 @@
   function subscribeToWeek(){
     if(unsubscribe){ unsubscribe(); unsubscribe=null; }
     if(!(USE_FIREBASE && db)) return;
-    // Robust: hent alt for valgt rom og filtrer ukeintervall lokalt (slipper composite index)
+    // Midlertidig/robust: hent alt for valgt rom og filtrer datoer lokalt
+    // Dette krever IKKE kompositt-indeks i Firestore.
     const start = toISODate(currentMonday);
     const endD = new Date(currentMonday); endD.setDate(endD.getDate()+6);
     const end = toISODate(endD);
+
     unsubscribe = db.collection('bookings')
       .where('room','==', currentRoom)
       .onSnapshot(snap => {
@@ -358,6 +363,19 @@
           }
         });
         state[currentRoom] = weekData;
+        renderWeek();
+      }, err => console.error('Firestore listener error', err));
+  }
+    if(!(USE_FIREBASE && db)) return;
+    const start = toISODate(currentMonday); const endD = new Date(currentMonday); endD.setDate(endD.getDate()+6); const end = toISODate(endD);
+    unsubscribe = db.collection('bookings')
+      .where('room','==', currentRoom)
+      .where('date','>=', start)
+      .where('date','<=', end)
+      .onSnapshot(snap => {
+        // Rensk uke for valgt rom, fyll med snapshot
+        state[currentRoom] = {};
+        snap.forEach(doc => { const b = doc.data(); if(!state[currentRoom][b.date]) state[currentRoom][b.date]={}; state[currentRoom][b.date][b.session] = { teacher:b.teacher, title:b.title }; });
         renderWeek();
       }, err => console.error('Firestore listener error', err));
   }
@@ -402,9 +420,7 @@
 
   deleteBtn.onclick = async ()=>{
     if(!active) return; const existing = getBooking(active.room, active.dateStr, active.session); if(!existing){ closeBooking(); return; }
-    const applySeries = confirm('Slette kun denne økten? (OK)
-
-Velg Avbryt for å slette serien (samme ukedag/økt framover).');
+    const applySeries = confirm('Slette kun denne økten? (OK)\n\nVelg Avbryt for å slette serien (samme ukedag/økt framover).');
     if(applySeries){ await setBooking(active.room, active.dateStr, active.session, null); }
     else { const baseDate = fromISODate(active.dateStr); let d = new Date(baseDate); while(d<=MAX_DATE){ const ds = toISODate(d); await setBooking(active.room, ds, active.session, null); d.setDate(d.getDate()+7); } }
     renderWeek(); closeBooking();
@@ -443,8 +459,7 @@ Velg Avbryt for å slette serien (samme ukedag/økt framover).');
         lines.push('BEGIN:VEVENT','UID:'+uid,'DTSTAMP:'+fmtICS(new Date()),'DTSTART:'+fmtICS(dtStart),'DTEND:'+fmtICS(dtEnd),'SUMMARY:'+escapeICS(summary),'DESCRIPTION:'+escapeICS(`Lærer: ${b.teacher || ''}`),'END:VEVENT');
       }
     }
-    lines.push('END:VCALENDAR'); return lines.join('
-');
+    lines.push('END:VCALENDAR'); return lines.join('\r\n');
   }
 
   // --- Init ---
@@ -452,9 +467,8 @@ Velg Avbryt for å slette serien (samme ukedag/økt framover).');
   setInterval(tickFollow, 60*1000); document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) tickFollow(); });
 
   // --- Utils ---
-  function escapeHtml(str){ return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',''':'&#39;'}[m])); }
-  function escapeICS(text){ return String(text||'').replace(/\/g,'\\').replace(/
-/g,'\n').replace(/,/g,'\,').replace(/;/g,'\;'); }
+  function escapeHtml(str){ return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
+  function escapeICS(text){ return String(text||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;'); }
 })();
 </script>
 </body>
