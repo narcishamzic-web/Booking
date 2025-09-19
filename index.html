@@ -1,92 +1,213 @@
 <!doctype html>
 <html lang="no">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RomBooking – Arbeidsplassen</title>
-<meta name="description" content="Rombooking med 5 økter per dag, egne kalendere per rom, gjentakende bookinger og uke-/uketallsvisning. Kan deles i Teams." />
-<style>
-:root{
---bg: #0b1020;
---panel: #121931;
---panel-2:#0f1530;
---muted:#9aa3b2;
---text:#eaf0ff;
---accent:#6ea8ff;
---danger:#ff6b6b;
---shadow: 0 10px 30px rgba(0,0,0,.35);
-}
-*{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b1020,#0a0f1e 40%,#090e1c);color:var(--text)}
-header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(10,14,28,.95),rgba(10,14,28,.8));backdrop-filter: blur(6px);border-bottom:1px solid rgba(255,255,255,.06)}
-.wrap{max-width:1200px;margin:0 auto;padding:16px}
-h1{margin:0;font-size:22px;letter-spacing:.3px}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RomBooking – SAFE RESET (lokal lagring)</title>
+  <meta name="description" content="Rombooking med 5 økter per dag, egne kalendere per rom, gjentakende bookinger og uke-/uketallsvisning. Denne utgaven bruker KUN lokal lagring og ingen eksterne skript." />
+  <style>
+    :root{--bg:#0b1020;--panel:#121931;--muted:#9aa3b2;--text:#eaf0ff;--shadow:0 10px 30px rgba(0,0,0,.35)}
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b1020,#0a0f1e 40%,#090e1c);color:var(--text)}
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(10,14,28,.95),rgba(10,14,28,.8));border-bottom:1px solid rgba(255,255,255,.06)}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    h1{margin:0;font-size:22px}
+    .banner{background:#2a3a62;border:1px solid #3e5bb3;padding:6px 10px;border-radius:10px;display:inline-block;margin-top:8px;font-size:12px}
+    .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:14px}
+    .tabs{display:flex;gap:6px;flex-wrap:wrap}
+    .tab{padding:10px 12px;border-radius:10px;background:var(--panel);border:1px solid rgba(255,255,255,.06);cursor:pointer;box-shadow:var(--shadow)}
+    .tab.active{outline:1px solid #2b64c9}
+    .btn{appearance:none;border:none;border-radius:10px;padding:10px 12px;background:var(--panel);color:var(--text);cursor:pointer;border:1px solid rgba(255,255,255,.08);box-shadow:var(--shadow)}
+    .calendar{margin:18px auto;max-width:1200px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.06);box-shadow:var(--shadow)}
+    .cal-head{display:grid;grid-template-columns:160px repeat(7,1fr);background:#0f1732}
+    .cal-row{display:grid;grid-template-columns:160px repeat(7,1fr)}
+    .cell,.headcell{border:1px solid rgba(255,255,255,.06);padding:10px;min-height:72px}
+    .headcell{background:linear-gradient(180deg,#151d3a,#101731);color:#cfe1ff;text-align:center;font-size:13px}
+    .slotlabel{display:flex;align-items:center;background:linear-gradient(180deg,#0d152f,#0b1226)}
+    .cell{background:linear-gradient(180deg,#0d142e,#0b1124)}
+    .cell[data-booked="true"]{background:linear-gradient(180deg,#13223f,#101a34)}
+    .booking{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;background:rgba(110,168,255,.12);border:1px solid rgba(110,168,255,.35)}
+    .booking .title{font-weight:600}.booking .meta{font-size:12px;color:#9aa3b2}
+    .legend{display:flex;gap:14px;flex-wrap:wrap;color:#9aa3b2;font-size:12px;margin-top:8px}
+    .weektitle{font-weight:700}.small{font-size:12px;color:#9aa3b2}
+    dialog{border:1px solid rgba(255,255,255,.1);border-radius:16px;background:linear-gradient(180deg,#0f1732,#0d1429);color:var(--text);padding:0;box-shadow:var(--shadow)}
+    .modal-head{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:center}
+    .modal-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+    .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>RomBooking</h1>
+    <div class="banner">✅ SAFE RESET (lokal lagring)</div>
+    <div class="toolbar">
+      <div class="tabs" id="roomTabs"></div>
+      <div style="flex:1"></div>
+      <button class="btn" id="prevWeekBtn">⟵</button>
+      <div><div class="weektitle" id="weekTitle">Uke X</div><div class="small" id="weekRange">Mandag – Søndag</div></div>
+      <button class="btn" id="nextWeekBtn">⟶</button>
+      <input type="date" id="jumpDate" class="btn" />
+      <button class="btn" id="exportBtn">Eksporter .ics</button>
+      <button class="btn" id="clearBtn">Tøm rom</button>
+      <button class="btn" id="followBtn" aria-pressed="true">Følg nå-uke</button>
+    </div>
+    <div class="legend"><span>•</span><span class="small">Klikk en rute for å booke/frigi</span></div>
+  </div>
+</header>
 
+<div class="calendar" id="calendar"></div>
 
-.toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:14px}
-.tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tab{padding:10px 12px;border-radius:10px;background:var(--panel);border:1px solid rgba(255,255,255,.06);cursor:pointer;color:var(--text);transition:.2s;box-shadow:var(--shadow)}
-.tab:hover{transform:translateY(-1px)}
-.tab.active{background:linear-gradient(180deg,#12224a,#101a38);border-color:#2b4c89}
+<dialog id="bookingDialog">
+  <div class="modal-head">
+    <div>
+      <div id="modalRoom" style="font-weight:600">Rom</div>
+      <div class="small" id="modalWhen">Dato • Økt</div>
+    </div>
+    <button class="btn" id="closeDialog">Lukk</button>
+  </div>
+  <form class="modal-body" id="bookingForm">
+    <label>Lærer (navn)<br><input id="teacher" required></label>
+    <label>Aktivitet/klasse (valgfritt)<br><input id="title"></label>
+    <label>Gjentakende<br>
+      <select id="repeat"><option value="none">Ingen</option><option value="weekly">Hver uke</option><option value="biweekly">Annenhver uke</option></select>
+    </label>
+    <label id="repeatUntilWrap" style="display:none">Gjenta til og med (maks 28.06.2026)<br><input type="date" id="repeatUntil"></label>
+  </form>
+  <div class="modal-actions">
+    <button class="btn" id="deleteBtn" type="button">Slett booking</button>
+    <button class="btn" id="saveBtn" type="button">Lagre</button>
+  </div>
+</dialog>
 
+<script>
+(() => {
+  const ROOMS = ["Møterommet","Grupperom 222","Auditoriet","Grupperom 104","Grupperom 116","Leserommet","Gymsal","Musikkrommet"];
+  const NUM_SESSIONS = 5;
+  const MAX_DATE = new Date("2026-06-28T23:59:59");
+  const STORAGE_KEY = "rombooking.v1";
+  const FOLLOW_KEY = "rombooking.followWeek";
 
-.spacer{flex:1}
-.btn{appearance:none;border:none;border-radius:10px;padding:10px 12px;background:var(--panel);color:var(--text);cursor:pointer;border:1px solid rgba(255,255,255,.08);transition:.2s;box-shadow:var(--shadow)}
-.btn:hover{transform:translateY(-1px)}
-.btn[disabled]{opacity:.5;cursor:not-allowed}
-.btn.danger{background:linear-gradient(180deg,#7a2230,#5e1a25);border-color:#a33}
-.btn.toggle[aria-pressed="true"]{outline:2px solid #2b64c9}
+  const pad = n => String(n).padStart(2,"0");
+  const toISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const fromISO = s => { const [y,m,dd]=s.split("-").map(Number); return new Date(y, m-1, dd); };
+  const weekday = ["Man","Tir","Ons","Tor","Fre","Lør","Søn"];
+  function startOfISOWeek(d){ const x=new Date(d); const w=(x.getDay()+6)%7; x.setDate(x.getDate()-w); x.setHours(0,0,0,0); return x; }
+  function getISOWeek(d){ const x=new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day=(x.getUTCDay()+6)%7; x.setUTCDate(x.getUTCDate()-day+3); const th=new Date(Date.UTC(x.getUTCFullYear(),0,4)); return 1+Math.floor((x-th)/86400000/7); }
+  const clampMax = d => d>MAX_DATE ? new Date(MAX_DATE) : d;
+  const esc = s => (s||"").replace(/[&<>\"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
 
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { state = {}; }
+  ROOMS.forEach(r => state[r] ||= {});
 
-.calendar{margin:18px auto;max-width:1200px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.06);box-shadow:var(--shadow)}
-.cal-head{display:grid;grid-template-columns:160px repeat(7,1fr);background:var(--panel)}
-.cal-row{display:grid;grid-template-columns:160px repeat(7,1fr)}
-.cell,.headcell{border:1px solid rgba(255,255,255,.06);padding:10px;min-height:72px}
-.headcell{background:linear-gradient(180deg,#151d3a,#101731);color:#cfe1ff;text-align:center;font-size:13px}
-.slotlabel{display:flex;gap:8px;align-items:center;height:100%;background:linear-gradient(180deg,#0d152f,#0b1226)}
-.slotlabel strong{font-size:14px}
-.cell{background:linear-gradient(180deg,#0d142e,#0b1124)}
-.cell[data-booked="true"]{background:linear-gradient(180deg,#13223f,#101a34)}
-.booking{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;background:rgba(110,168,255,.12);border:1px solid rgba(110,168,255,.35)}
-.booking .title{font-weight:600}
-.booking .meta{font-size:12px;color:var(--muted)}
+  const roomTabs=document.getElementById("roomTabs"), calendar=document.getElementById("calendar");
+  const weekTitle=document.getElementById("weekTitle"), weekRange=document.getElementById("weekRange");
+  const prevWeekBtn=document.getElementById("prevWeekBtn"), nextWeekBtn=document.getElementById("nextWeekBtn");
+  const jumpDate=document.getElementById("jumpDate"), exportBtn=document.getElementById("exportBtn");
+  const clearBtn=document.getElementById("clearBtn"), followBtn=document.getElementById("followBtn");
+  const dialog=document.getElementById("bookingDialog"), modalRoom=document.getElementById("modalRoom");
+  const modalWhen=document.getElementById("modalWhen"), teacher=document.getElementById("teacher");
+  const title=document.getElementById("title"), repeatSel=document.getElementById("repeat");
+  const repeatUntilWrap=document.getElementById("repeatUntilWrap"), repeatUntil=document.getElementById("repeatUntil");
+  const saveBtn=document.getElementById("saveBtn"), delBtn=document.getElementById("deleteBtn"), closeDialog=document.getElementById("closeDialog");
 
+  let currentRoom = ROOMS[0];
+  let monday = startOfISOWeek(new Date());
+  let follow = (localStorage.getItem(FOLLOW_KEY) ?? "true") === "true";
 
-.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:8px}
-.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;background:#6ea8ff;border:1px solid rgba(110,168,255,.7)}
+  function renderTabs(){
+    roomTabs.innerHTML="";
+    ROOMS.forEach(r=>{
+      const b=document.createElement("button");
+      b.className="tab"+(r===currentRoom?" active":""); b.textContent=r;
+      b.onclick=()=>{ currentRoom=r; renderTabs(); renderWeek(); };
+      roomTabs.appendChild(b);
+    });
+  }
 
+  function renderWeek(){
+    const week = getISOWeek(monday);
+    const end = new Date(monday); end.setDate(end.getDate()+6);
+    weekTitle.textContent = `Uke ${week}`;
+    weekRange.textContent = `${monday.toLocaleDateString("no-NO",{day:"2-digit",month:"2-digit"})} – ${end.toLocaleDateString("no-NO",{day:"2-digit",month:"2-digit"})}`;
 
-.nav{display:flex;gap:8px;align-items:center}
-.weektitle{font-weight:700}
-.small{font-size:12px;color:var(--muted)}
+    const head=document.createElement("div"); head.className="cal-head";
+    const first=document.createElement("div"); first.className="headcell"; first.textContent="Økt / Dag"; head.appendChild(first);
+    const days=["Man","Tir","Ons","Tor","Fre","Lør","Søn"];
+    for(let i=0;i<7;i++){
+      const d=new Date(monday); d.setDate(d.getDate()+i);
+      const hc=document.createElement("div"); hc.className="headcell";
+      hc.innerHTML=`<div><strong>${days[i]}</strong></div><div class="small">${d.toLocaleDateString("no-NO",{day:"2-digit",month:"2-digit"})}</div>`;
+      head.appendChild(hc);
+    }
 
+    const rows=[];
+    for(let s=1; s<=NUM_SESSIONS; s++){
+      const row=document.createElement("div"); row.className="cal-row";
+      const label=document.createElement("div"); label.className="cell slotlabel"; label.innerHTML=`<strong>${s}. økt</strong>`; row.appendChild(label);
+      for(let i=0;i<7;i++){
+        const d=new Date(monday); d.setDate(d.getDate()+i);
+        const cell=document.createElement("div"); cell.className="cell";
+        cell.dataset.date=toISO(d); cell.dataset.session=s;
+        const b = state[currentRoom]?.[cell.dataset.date]?.[s] || null;
+        if(b){ cell.dataset.booked="true"; cell.innerHTML=`<div class="booking"><div class="title">${esc(b.title||"Booket")}</div><div class="meta">${esc(b.teacher||"")}</div></div>`; }
+        else { cell.dataset.booked="false"; cell.innerHTML=""; }
+        cell.onclick=()=>openBooking(cell.dataset.date, s);
+        row.appendChild(cell);
+      }
+      rows.push(row);
+    }
+    calendar.innerHTML=""; calendar.appendChild(head); rows.forEach(r=>calendar.appendChild(r));
+    jumpDate.value = toISO(monday);
+  }
 
-dialog{border:1px solid rgba(255,255,255,.1);border-radius:16px;background:linear-gradient(180deg,#0f1732,#0d1429);color:var(--text);padding:0;box-shadow:var(--shadow)}
-.modal-head{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:center}
-.modal-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
-.field{display:flex;flex-direction:column;gap:6px}
-label{font-size:13px;color:var(--muted)}
-input,select{background:#101730;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--text);padding:10px}
-.modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+  function openBooking(dateStr, session){
+    const d=fromISO(dateStr); if(d>MAX_DATE){ alert("Kan ikke booke etter 28.06.2026"); return; }
+    modalRoom.textContent=currentRoom;
+    const week=getISOWeek(d), dayName=weekday[(d.getDay()+6)%7];
+    modalWhen.textContent=`${dayName} ${d.toLocaleDateString("no-NO")} • ${session}. økt • Uke ${week}`;
+    const existing = state[currentRoom]?.[dateStr]?.[session] || null;
+    teacher.value = existing?.teacher || ""; title.value = existing?.title || "";
+    delBtn.style.display = existing ? "inline-flex":"none";
+    repeatSel.value="none"; repeatUntilWrap.style.display="none"; repeatUntil.value="";
+    dialog.showModal(); dialog.dataset.date=dateStr; dialog.dataset.session=session;
+  }
 
+  function saveLocal(room, dateStr, session, booking){
+    state[room] ||= {}; state[room][dateStr] ||= {};
+    if(booking) state[room][dateStr][session]=booking; else delete state[room][dateStr][session];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
 
-.foot{color:var(--muted);font-size:12px;text-align:center;margin:20px 0}
-.pill{display:inline-block;padding:4px 8px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(255,255,255,.04)}
-.roomtitle{font-weight:600}
+  saveBtn.onclick = ()=>{
+    const dateStr=dialog.dataset.date, session=Number(dialog.dataset.session);
+    const b={ teacher: teacher.value.trim(), title: title.value.trim() };
+    if(!b.teacher){ alert("Skriv inn lærer"); return; }
+    const base=new Date(fromISO(dateStr));
+    const mode=repeatSel.value;
+    const until= repeatUntil.value ? (new Date(Math.min(new Date(repeatUntil.value), MAX_DATE))) : MAX_DATE;
+    const step = mode==="weekly" ? 7 : (mode==="biweekly" ? 14 : 0);
+    if(step===0){ saveLocal(currentRoom, dateStr, session, b); }
+    else { let d=new Date(base); while(d<=until){ saveLocal(currentRoom, toISO(d), session, b); d.setDate(d.getDate()+step); } }
+    dialog.close(); renderWeek();
+  };
 
+  delBtn.onclick = ()=>{
+    const dateStr=dialog.dataset.date, session=Number(dialog.dataset.session);
+    const existing = state[currentRoom]?.[dateStr]?.[session];
+    if(!existing){ dialog.close(); return; }
+    const single = confirm("Slette kun denne økten? (OK)\n\nVelg Avbryt for å slette serien (samme ukedag/økt framover).");
+    if(single){ saveLocal(currentRoom, dateStr, session, null); }
+    else { let d=new Date(fromISO(dateStr)); while(d<=MAX_DATE){ saveLocal(currentRoom, toISO(d), session, null); d.setDate(d.getDate()+7); } }
+    dialog.close(); renderWeek();
+  };
 
-@media (max-width: 900px){
-.cal-head,.cal-row{grid-template-columns:120px repeat(7,1fr)}
-.cell{min-height:84px}
-}
-@media (max-width: 720px){
-.cal-head,.cal-row{grid-template-columns:90px repeat(7,1fr)}
-.headcell{padding:8px;font-size:11px}
-.slotlabel strong{font-size:13px}
-}
-@media (max-width: 580px){
-.tabs{overflow:auto;white-space:nowrap}
-.calendar{border:none;border-radius:0}
-.wrap{padding:12px}
+  prevWeekBtn.onclick=()=>{ localStorage.setItem(FOLLOW_KEY,"false"); monday.setDate(monday.getDate()-7); renderWeek(); };
+  nextWeekBtn.onclick=()=>{ localStorage.setItem(FOLLOW_KEY,"false"); monday.setDate(monday.getDate()+7); renderWeek(); };
+  jumpDate.onchange = e => { localStorage.setItem(FOLLOW_KEY,"false"); monday = startOfISOWeek(fromISO(e.target.value)); renderWeek(); };
+  followBtn.onclick = ()=>{ const f=(localStorage.getItem(FOLLOW_KEY)??"true")==="true"; localStorage.setItem(FOLLOW_KEY, String(!f)); if(!f){ monday=startOfISOWeek(new Date()); } renderWeek(); };
+})();
+</script>
+</body>
 </html>
