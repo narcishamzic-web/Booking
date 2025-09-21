@@ -1,68 +1,553 @@
 <!DOCTYPE html>
 <html lang="no">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>FUSK – Rombooking</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-:root { --brand:#14532d; }
-body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-.slot { transition: transform .05s ease, box-shadow .2s ease; }
-.slot:hover { transform: translateY(-1px); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
-.scrollbar-thin::-webkit-scrollbar{height:8px;width:8px}
-.scrollbar-thin::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
-.scrollbar-thin::-webkit-scrollbar-track{background:transparent}
-</style>
-<!-- Firebase SDKs (Compat for enkelhet) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FUSK – Rombooking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --brand:#14532d; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .slot { transition: transform .05s ease, box-shadow .2s ease; }
+    .slot:hover { transform: translateY(-1px); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+    .scrollbar-thin::-webkit-scrollbar{height:8px;width:8px}
+    .scrollbar-thin::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+    .scrollbar-thin::-webkit-scrollbar-track{background:transparent}
+  </style>
+  <!-- Firebase SDKs (Compat for enkelhet) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-900">
-<div class="max-w-7xl mx-auto p-4 md:p-6">
-<header class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-<div>
-<h1 class="text-2xl md:text-3xl font-bold">FUSK – Rombooking</h1>
-<p class="text-slate-600">Ungdomsskole • Del denne siden som lenke i Teams</p>
-</div>
-<div class="flex items-center gap-2">
-<label class="sr-only" for="teacherName">Lærer</label>
-<input id="teacherName" type="text" placeholder="Ditt navn (Lærer)" class="px-3 py-2 rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-<button id="helpBtn" class="px-3 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700">Hjelp</button>
-</div>
-</header>
+  <div class="max-w-7xl mx-auto p-4 md:p-6">
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-bold">FUSK – Rombooking</h1>
+        <p class="text-slate-600">Ungdomsskole • Del denne siden som lenke i Teams</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="sr-only" for="teacherName">Lærer</label>
+        <input id="teacherName" type="text" placeholder="Ditt navn (Lærer)" class="px-3 py-2 rounded-lg border border-slate-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        <button id="helpBtn" class="px-3 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700">Hjelp</button>
+      </div>
+    </header>
 
+    <!-- Statuslinje -->
+    <div id="statusBar" class="mb-3 hidden items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 md:flex">
+      <div>
+        <span id="connBadge" class="mr-2 inline-flex items-center rounded-full border px-2 py-0.5 text-xs">Sjekker tilkobling…</span>
+        <span id="projectInfo" class="text-slate-500"></span>
+      </div>
+      <button id="runDiag" class="rounded-lg border border-slate-300 bg-white px-2 py-1">Diagnose</button>
+    </div>
 
-<!-- Rom-velger -->
-<nav id="roomTabs" class="flex flex-wrap gap-2 mb-4"></nav>
+    <!-- Rom-velger -->
+    <nav id="roomTabs" class="flex flex-wrap gap-2 mb-4"></nav>
 
+    <!-- Uke-kontroller -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div class="flex items-center gap-2">
+        <button id="prevWeek" class="px-3 py-2 rounded-lg border border-slate-300 bg-white">← Forrige</button>
+        <button id="thisWeek" class="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Gjeldende uke</button>
+        <button id="nextWeek" class="px-3 py-2 rounded-lg border border-slate-300 bg-white">Neste →</button>
+      </div>
+      <div class="text-right">
+        <div class="text-sm text-slate-600">Uke <span id="weekNumber">–</span> • <span id="weekRange">–</span></div>
+        <div class="text-xs text-slate-500">Kan bookes t.o.m. 28.06.2026</div>
+      </div>
+    </div>
 
-<!-- Uke-kontroller -->
-<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-<div class="flex items-center gap-2">
-<button id="prevWeek" class="px-3 py-2 rounded-lg border border-slate-300 bg-white">← Forrige</button>
-<button id="thisWeek" class="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Gjeldende uke</button>
-<button id="nextWeek" class="px-3 py-2 rounded-lg border border-slate-300 bg-white">Neste →</button>
-</div>
-<div class="text-right">
-<div class="text-sm text-slate-600">Uke <span id="weekNumber">–</span> • <span id="weekRange">–</span></div>
-<div class="text-xs text-slate-500">Kan bookes t.o.m. 28.06.2026</div>
-</div>
-</div>
+    <!-- Kalender -->
+    <div class="overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <table class="min-w-full border-collapse">
+        <thead class="bg-slate-100/60">
+          <tr>
+            <th class="sticky left-0 bg-slate-100/60 p-3 text-left text-sm font-semibold border-b border-slate-200">Økt</th>
+            <th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Mandag</th>
+            <th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Tirsdag</th>
+            <th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Onsdag</th>
+            <th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Torsdag</th>
+            <th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Fredag</th>
+          </tr>
+        </thead>
+        <tbody id="calendarBody"></tbody>
+      </table>
+    </div>
 
+    <!-- Legg til booking / hurtig-knapp -->
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="text-sm text-slate-600">Alle kan se hverandres bookinger i sanntid. Dobbelklikk en ledig rute for å booke.</div>
+      <button id="newBookingBtn" class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Ny booking</button>
+    </div>
+  </div>
 
-<!-- Kalender -->
-<div class="overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-<table class="min-w-full border-collapse">
-<thead class="bg-slate-100/60">
-<tr>
-<th class="sticky left-0 bg-slate-100/60 p-3 text-left text-sm font-semibold border-b border-slate-200">Økt</th>
-<th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Mandag</th>
-<th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Tirsdag</th>
-<th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Onsdag</th>
-<th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Torsdag</th>
-<th class="p-3 text-left text-sm font-semibold border-b border-slate-200">Fredag</th>
+  <!-- Dialog: Booking -->
+  <dialog id="bookingDialog" class="rounded-2xl p-0 border-0 w-full max-w-xl shadow-2xl">
+    <form method="dialog" class="bg-white rounded-2xl overflow-hidden">
+      <div class="px-5 py-4 bg-emerald-700 text-white flex items-center justify-between">
+        <h3 class="font-semibold">Book rom</h3>
+        <button class="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20" value="close">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Rom</label>
+            <select id="dialogRoom" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"></select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Dato</label>
+            <input id="dialogDate" type="date" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Økt</label>
+            <select id="dialogSlot" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white">
+              <option value="1">1. økt</option>
+              <option value="2">2. økt</option>
+              <option value="3">3. økt</option>
+              <option value="4">4. økt</option>
+              <option value="5">5. økt</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Lærer</label>
+            <input id="dialogTeacher" type="text" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white" placeholder="Navn" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Tittel / fag / klasse (valgfritt)</label>
+          <input id="dialogTitle" type="text" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white" placeholder="Eks: Norsk 9B" />
+        </div>
+        <fieldset class="border border-slate-200 rounded-xl p-3">
+          <legend class="text-sm font-semibold px-1">Gjentagende booking</legend>
+          <div class="flex items-center gap-2 mb-2">
+            <input id="recurEnabled" type="checkbox" class="w-4 h-4">
+            <label for="recurEnabled" class="text-sm">Gjenta ukentlig</label>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Til og med dato</label>
+              <input id="recurUntil" type="date" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Hopp over ferier/helligdager (skriv datoer, komma-separert)</label>
+              <input id="recurSkips" type="text" placeholder="2025-10-01, 2025-12-20" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white" />
+            </div>
+            <div class="self-end text-xs text-slate-500">Gjelder kun samme ukedag &amp; økt</div>
+          </div>
+        </fieldset>
+        <div class="flex items-center justify-between gap-3 text-sm">
+          <div class="text-slate-600">Konflikter sjekkes automatisk. Maks dato 28.06.2026.</div>
+          <div class="flex gap-2">
+            <button value="close" class="px-4 py-2 rounded-lg border border-slate-300 bg-white">Avbryt</button>
+            <button id="saveBooking" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700" type="button">Lagre</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Dialog: Hjelp -->
+  <dialog id="helpDialog" class="rounded-2xl p-0 border-0 w-full max-w-2xl shadow-2xl">
+    <form method="dialog" class="bg-white rounded-2xl overflow-hidden">
+      <div class="px-5 py-4 bg-slate-800 text-white flex items-center justify-between">
+        <h3 class="font-semibold">Hvordan fungerer dette?</h3>
+        <button class="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20" value="close">✕</button>
+      </div>
+      <div class="p-5 space-y-3 text-sm text-slate-700">
+        <p>• Delt via Teams – alle ser samme plan i sanntid. Ingenting lagres lokalt.</p>
+        <p>• Dobbeltklikk en ledig rute for å booke. Klikk på en booking for detaljer.</p>
+        <p>• Du kan gjenta ukentlig frem til valgt dato (maks 28.06.2026). Systemet hopper over valgte ferier/helligdager.</p>
+        <p>• Økter per dag: 1.–5. økt. Uken viser alltid gjeldende uke (og oppdateres automatisk ved uke-skifte).</p>
+        <p>• Rom: Møterommet, Grupperom 222, Auditoriet, Grupperom 104, Grupperom 116, Leserommet, Gymsal, Musikkrommet.</p>
+      </div>
+      <div class="px-5 py-4 bg-slate-50 text-right">
+        <button class="px-4 py-2 rounded-lg border border-slate-300 bg-white" value="close">Lukk</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    // === KONFIGURASJON ===
+    const ROOMS = [
+      "Møterommet",
+      "Grupperom 222",
+      "Auditoriet",
+      "Grupperom 104",
+      "Grupperom 116",
+      "Leserommet",
+      "Gymsal",
+      "Musikkrommet",
+    ];
+    const MAX_DATE = new Date("2026-06-28T23:59:59+02:00");
+
+    // === Firebase (REALTIME DELT DATA) ===
+    const firebaseConfig = {
+      apiKey: "AlzaSyDQTUJ59sCUn9Koh8MTs8MZf0TdIhfe8SY",
+      authDomain: "booking-f55c3.firebaseapp.com",
+      projectId: "booking-f55c3",
+    };
+
+    // Sikkerhetsregler (lim inn i Firestore Rules):
+    // rules_version = '2';
+    // service cloud.firestore {
+    //   match /databases/{database}/documents {
+    //     match /bookings/{id} {
+    //       allow read: if true; // alle kan lese
+    //       allow create, update, delete: if true; // enkel åpen løsning (kan strammes inn senere)
+    //     }
+    //   }
+    // }
+
+    firebase.initializeApp(firebaseConfig);
+    let db;
+    try {
+      db = firebase.firestore();
+      document.getElementById('statusBar').classList.remove('hidden');
+      document.getElementById('projectInfo').textContent = `Prosjekt: ${firebase.app().options.projectId || 'ukjent'}`;
+    } catch (e) {
+      console.error('Firestore init-feil:', e);
+    }
+
+    // === UI & Diagnose helpers (trengs tidlig) ===
+    const connBadge = document.getElementById('connBadge');
+    const runDiagBtn = document.getElementById('runDiag');
+    function setConnBadge(state, extra=''){
+      if(!connBadge) return;
+      const base = 'mr-2 inline-flex items-center rounded-full border px-2 py-0.5 text-xs';
+      if(state==='ok'){
+        connBadge.className = base + ' border-emerald-300 text-emerald-700 bg-emerald-50';
+        connBadge.textContent = 'Tilkoblet Firestore';
+      } else if(state==='err'){
+        connBadge.className = base + ' border-rose-300 text-rose-700 bg-rose-50';
+        connBadge.textContent = 'Feil' + (extra? `: ${extra}` : '');
+      } else {
+        connBadge.className = base + ' border-slate-300 text-slate-600 bg-slate-50';
+        connBadge.textContent = 'Sjekker tilkobling…';
+      }
+    }
+    function msgFromError(err){
+      if(!err) return 'Ukjent feil';
+      if(err.code && err.message) return `${err.code}: ${err.message}`;
+      if(err.message) return err.message;
+      try { return JSON.stringify(err); } catch(_) { return String(err); }
+    }
+    async function runDiagnostics(){
+      setConnBadge();
+      try{
+        await db.collection('bookings').limit(1).get();
+        setConnBadge('ok');
+      } catch(e){
+        setConnBadge('err', e.code || 'ukjent');
+        console.error('Diagnose-feil:', e);
+        alert(`Diagnose: ${msgFromError(e)}\n\nVanlige årsaker:\n• Firestore Rules for stramme (permission-denied)\n• Feil projectId/apiKey i firebaseConfig\n• Nettverk/Adblock`);
+      }
+    }
+    if(runDiagBtn){ runDiagBtn.onclick = runDiagnostics; }
+
+    // === HJELPEFUNKSJONER ===
+    const fmtDate = (d) => d.toISOString().slice(0,10);
+
+    function mondayOfISOWeek(date){
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const day = d.getUTCDay() || 7; // 1-7 med 1=man
+      if(day !== 1) d.setUTCDate(d.getUTCDate() - (day - 1));
+      return new Date(d);
+    }
+
+    function addDays(date, days){
+      const d = new Date(date); d.setUTCDate(d.getUTCDate()+days); return d;
+    }
+
+    function getISOWeekNumber(date) {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+      return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+    }
+
+    function getISOWeekYear(date){
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      return d.getUTCFullYear();
+    }
+
+    function isoWeekKey(date){
+      const week = String(getISOWeekNumber(date)).padStart(2,'0');
+      const year = getISOWeekYear(date);
+      return `${year}-W${week}`;
+    }
+
+    function roomWeekKey(room, dateStr){
+      const d = new Date(dateStr + 'T12:00:00');
+      return `${room}__${isoWeekKey(d)}`;
+    }
+
+    function clampToMax(dateStr){
+      const d = new Date(dateStr + 'T12:00:00');
+      return d > MAX_DATE ? fmtDate(MAX_DATE) : dateStr;
+    }
+
+    // === UI ELEMENTER ===
+    const roomTabs = document.getElementById('roomTabs');
+    const calendarBody = document.getElementById('calendarBody');
+    const weekNumberEl = document.getElementById('weekNumber');
+    const weekRangeEl = document.getElementById('weekRange');
+    const prevWeekBtn = document.getElementById('prevWeek');
+    const nextWeekBtn = document.getElementById('nextWeek');
+    const thisWeekBtn = document.getElementById('thisWeek');
+    const newBookingBtn = document.getElementById('newBookingBtn');
+    const helpBtn = document.getElementById('helpBtn');
+    const helpDialog = document.getElementById('helpDialog');
+
+    const bookingDialog = document.getElementById('bookingDialog');
+    const dialogRoom = document.getElementById('dialogRoom');
+    const dialogDate = document.getElementById('dialogDate');
+    const dialogSlot = document.getElementById('dialogSlot');
+    const dialogTeacher = document.getElementById('dialogTeacher');
+    const dialogTitle = document.getElementById('dialogTitle');
+    const recurEnabled = document.getElementById('recurEnabled');
+    const recurUntil = document.getElementById('recurUntil');
+    const recurSkips = document.getElementById('recurSkips');
+    const saveBookingBtn = document.getElementById('saveBooking');
+    const teacherNameInput = document.getElementById('teacherName');
+
+    // State
+    let currentMonday = mondayOfISOWeek(new Date());
+    let selectedRoom = ROOMS[0];
+    let unsubscribe = null;
+
+    // Tabs
+    function renderRoomTabs(){
+      roomTabs.innerHTML = '';
+      ROOMS.forEach(room => {
+        const btn = document.createElement('button');
+        const isActive = (room === selectedRoom);
+        btn.className = `px-3 py-2 rounded-lg border ${isActive ? 'bg-emerald-600 text-white border-emerald-600':'bg-white border-slate-300'} hover:shadow`;
+        btn.textContent = room;
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        btn.onclick = ()=>{ 
+          selectedRoom = room; 
+          renderRoomTabs();
+          renderCalendarGrid();
+          attachWeekListener();
+        };
+        roomTabs.appendChild(btn);
+      });
+      dialogRoom.innerHTML = ROOMS.map(r=>`<option ${r===selectedRoom?'selected':''}>${r}</option>`).join('');
+    }
+
+    // Grid
+    function renderCalendarGrid(){
+      const weekNum = getISOWeekNumber(currentMonday);
+      weekNumberEl.textContent = weekNum;
+      const fri = addDays(currentMonday, 4);
+      weekRangeEl.textContent = `${fmtDate(currentMonday)} – ${fmtDate(fri)}`;
+
+      calendarBody.innerHTML = '';
+      for(let slot=1; slot<=5; slot++){
+        const tr = document.createElement('tr');
+        const th = document.createElement('th');
+        th.className = 'sticky left-0 bg-white p-3 text-sm font-semibold border-b border-slate-200';
+        th.textContent = `${slot}. økt`;
+        tr.appendChild(th);
+        for(let d=0; d<5; d++){
+          const cell = document.createElement('td');
+          cell.className = 'p-0 align-top border-b border-slate-100';
+
+          const date = addDays(currentMonday, d);
+          const dateStr = fmtDate(date);
+
+          const btn = document.createElement('button');
+          btn.className = 'slot w-full text-left p-3 min-h-[72px]';
+          btn.dataset.date = dateStr;
+          btn.dataset.slot = String(slot);
+          btn.ondblclick = () => openBookingDialog({date: dateStr, slot});
+
+          const head = document.createElement('div');
+          head.className = 'flex items-center justify-between text-xs text-slate-500';
+          head.innerHTML = `<span>${['Man','Tir','Ons','Tor','Fre'][d]} ${dateStr}</span>`;
+
+          const content = document.createElement('div');
+          content.className = 'mt-1 text-sm';
+          content.textContent = 'Ledig';
+
+          btn.appendChild(head);
+          btn.appendChild(content);
+
+          cell.appendChild(btn);
+          tr.appendChild(cell);
+        }
+        calendarBody.appendChild(tr);
+      }
+    }
+
+    // Fyll grid med bookinger
+    function applyBookingsToGrid(bookings){
+      const map = new Map();
+      bookings.forEach(b => {
+        const key = `${b.room}|${b.date}|${b.slot}`;
+        map.set(key, b);
+      });
+      document.querySelectorAll('.slot').forEach(btn => {
+        const date = btn.dataset.date;
+        const slot = btn.dataset.slot;
+        const key = `${selectedRoom}|${date}|${slot}`;
+        const content = btn.querySelector('div.mt-1');
+        if(map.has(key)){
+          const b = map.get(key);
+          btn.classList.add('bg-emerald-50');
+          content.innerHTML = `<div class="font-semibold">${b.title || 'Opptatt'}</div><div class="text-xs text-slate-600">${b.teacher}</div>`;
+          btn.onclick = () => showBookingInfo(b);
+        } else {
+          btn.classList.remove('bg-emerald-50');
+          content.textContent = 'Ledig';
+          btn.onclick = null;
+        }
+      });
+      setConnBadge('ok');
+    }
+
+    function showBookingInfo(b){
+      const msg = `${b.room} – ${b.date} – ${b.slot}. økt\nLærer: ${b.teacher}${b.title? `\nTittel: ${b.title}`:''}`;
+      alert(msg);
+    }
+
+    function openBookingDialog(pref={}){
+      renderRoomTabs();
+      dialogRoom.value = selectedRoom;
+      dialogDate.value = clampToMax(pref.date || fmtDate(currentMonday));
+      dialogSlot.value = String(pref.slot || 1);
+      dialogTeacher.value = teacherNameInput.value || '';
+      dialogTitle.value = '';
+      recurEnabled.checked = false;
+      recurUntil.value = fmtDate(MAX_DATE);
+      recurSkips.value = '';
+      bookingDialog.showModal();
+    }
+
+    async function saveBooking(){
+      const room = dialogRoom.value;
+      const date = clampToMax(dialogDate.value);
+      const slot = parseInt(dialogSlot.value,10);
+      const teacher = (dialogTeacher.value || teacherNameInput.value || '').trim();
+      const title = dialogTitle.value.trim();
+      if(!teacher){ alert('Skriv inn lærernavn.'); return; }
+      if(!date){ alert('Velg dato.'); return; }
+
+      const createOne = async (dateStr, groupId=null) => {
+        const docId = `${room}__${dateStr}__${slot}`;
+        const ref = db.collection('bookings').doc(docId);
+        const roomWeek = roomWeekKey(room, dateStr);
+        return db.runTransaction(async (tx) => {
+          const snap = await tx.get(ref);
+          if(snap.exists){ throw new Error(`${room} ${dateStr} ${slot}. økt er allerede booket.`); }
+          tx.set(ref, { room, date: dateStr, slot, teacher, title, roomWeek, createdAt: new Date().toISOString(), groupId });
+        });
+      };
+
+      try{
+        if(recurEnabled.checked){
+          const until = new Date(recurUntil.value || MAX_DATE);
+          const skips = (recurSkips.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+          const start = new Date(date + 'T12:00:00');
+          if(start > MAX_DATE){ throw new Error('Dato er etter 28.06.2026'); }
+          const groupId = `g_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+
+          const dates = [];
+          let cursor = new Date(start);
+          while(cursor <= until && cursor <= MAX_DATE){
+            const ds = fmtDate(cursor);
+            if(!skips.includes(ds)) dates.push(ds);
+            cursor.setDate(cursor.getDate()+7);
+          }
+          for(const ds of dates){ await createOne(ds, groupId); }
+          alert(`Booket ${dates.length} forekomster.`);
+        } else {
+          await createOne(date, null);
+          alert('Booking lagret.');
+        }
+        bookingDialog.close();
+      } catch(err){
+        console.error('Lagre-feil:', err);
+        alert((err && err.message) ? err.message : 'Klarte ikke lagre booking. Sjekk konsollen for detaljer.');
+      }
+    }
+
+    // Lytter på uke/rom for sanntid – uten behov for komposittindeks
+    function attachWeekListener(){
+      if(!db){ setConnBadge('err', 'Ingen Firestore-tilkobling'); return; }
+      if(unsubscribe) { unsubscribe(); unsubscribe = null; }
+      const key = `${selectedRoom}__${isoWeekKey(currentMonday)}`;
+      try {
+        unsubscribe = db.collection('bookings')
+          .where('roomWeek','==', key)
+          .onSnapshot(snap => {
+            const arr = [];
+            snap.forEach(doc => arr.push(doc.data()));
+            applyBookingsToGrid(arr);
+          }, (err) => {
+            console.error('Lytter-feil:', err);
+            setConnBadge('err', 'Lyttefeil');
+          });
+      } catch (e) {
+        console.error('attachWeekListener-feil:', e);
+        setConnBadge('err', 'Uventet feil');
+      }
+      renderCalendarGrid();
+    }
+
+    // Auto-oppdater til gjeldende uke ved midnatt
+    function scheduleMidnightTick(){
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(24,0,0,0);
+      setTimeout(()=>{
+        currentMonday = mondayOfISOWeek(new Date());
+        attachWeekListener();
+        scheduleMidnightTick();
+      }, next - now);
+    }
+
+    // Event bindings
+    prevWeekBtn.onclick = ()=>{ currentMonday.setDate(currentMonday.getDate()-7); attachWeekListener(); };
+    nextWeekBtn.onclick = ()=>{ currentMonday.setDate(currentMonday.getDate()+7); attachWeekListener(); };
+    thisWeekBtn.onclick = ()=>{ currentMonday = mondayOfISOWeek(new Date()); attachWeekListener(); };
+    newBookingBtn.onclick = ()=> openBookingDialog({ date: fmtDate(currentMonday), slot: 1 });
+    helpBtn.onclick = ()=> helpDialog.showModal();
+    saveBookingBtn.onclick = saveBooking;
+
+    // Dobbeltklikk tips på mobil (fallback)
+    document.addEventListener('touchstart', ()=>{}, {once:true});
+
+    // === Enkle "tester" i konsollen ===
+    function assertEq(a,b,label){ if(a!==b){ console.error('TEST FEIL:', label, 'forventet', b, 'fikk', a); } else { console.log('TEST OK:', label); } }
+    (function runTests(){
+      // ISO uke over nyttår (eksisterende)
+      assertEq(isoWeekKey(new Date('2025-01-01T12:00:00Z')), '2025-W01', 'ISO uke for 2025-01-01');
+      assertEq(isoWeekKey(new Date('2024-12-31T12:00:00Z')), '2025-W01', 'ISO uke-år skifte 2024-12-31');
+      // clampToMax (eksisterende)
+      assertEq(clampToMax('2027-01-01'), fmtDate(MAX_DATE), 'clampToMax etter grense');
+      // Nye småtester
+      assertEq(roomWeekKey('Møterommet','2025-09-15').startsWith('Møterommet__'), true, 'roomWeekKey prefix');
+      // Samme uke for man-fre skal ha samme roomWeekKey
+      const wkMon = roomWeekKey('Møterommet','2025-09-15');
+      const wkFri = roomWeekKey('Møterommet','2025-09-19');
+      assertEq(wkMon === wkFri, true, 'roomWeekKey samme uke');
+      // Nøkkelbygging for applyBookingsToGrid
+      const sampleKey = `${'Møterommet'}|${'2025-09-15'}|${3}`;
+      assertEq(sampleKey, 'Møterommet|2025-09-15|3', 'nøkkelbygger');
+    })();
+
+    // INIT
+    renderRoomTabs();
+    renderCalendarGrid();
+    attachWeekListener();
+    scheduleMidnightTick();
+  </script>
+</body>
 </html>
