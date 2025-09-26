@@ -111,6 +111,7 @@
               <option value="3">3. økt</option>
               <option value="4">4. økt</option>
               <option value="5">5. økt</option>
+              <option value="6">Ettermiddagsøkt (14:30–16:00)</option>
             </select>
           </div>
           <div>
@@ -223,7 +224,7 @@
         <p>• Delt via Teams – alle ser samme plan i sanntid. Ingenting lagres lokalt.</p>
         <p>• Klikk en ledig rute for å booke. Klikk på en booking for detaljer. Sletting kun for admin eller eier (samme lærer-navn).</p>
         <p>• Du kan gjenta ukentlig frem til valgt dato (maks 28.06.2026). Systemet hopper over valgte ferier/helligdager.</p>
-        <p>• Økter per dag: 1.–5. økt. Uken viser alltid gjeldende uke (og oppdateres automatisk ved uke-skifte).</p>
+        <p>• Økter per dag: 1.–5. økt + Ettermiddagsøkt (14:30–16:00). Uken viser alltid gjeldende uke (og oppdateres automatisk ved uke-skifte).</p>
         <p>• Rom: Møterommet, Grupperom 222, Auditoriet, Grupperom 104, Grupperom 116, Leserommet, Gymsal, Musikkrommet, Treningsrommet, Grupperom 218.</p>
       </div>
       <div class="px-5 py-4 bg-slate-50 text-right">
@@ -394,6 +395,10 @@
     const full = ['Mandag','Tirsdag','Onsdag','Torsdag','Fredag'];
     return full.map(function(name, i){ return name + ' ' + fmtDate(addDays(monday, i)); });
   }
+  function slotLabel(n){
+    n = Number(n);
+    return n === 6 ? 'Ettermiddagsøkt (14:30–16:00)' : (n + '. økt');
+  }
 
   // === UI ELEMENTER ===
   const roomTabs = document.getElementById('roomTabs');
@@ -483,11 +488,11 @@
     }
 
     calendarBody.innerHTML = '';
-    for(let slot=1; slot<=5; slot++){
+    for(let slot=1; slot<=6; slot++){
       const tr = document.createElement('tr');
       const th = document.createElement('th');
       th.className = 'sticky left-0 bg-white p-3 text-sm font-semibold border-b border-slate-200';
-      th.textContent = slot + '. økt';
+      th.textContent = slotLabel(slot);
       tr.appendChild(th);
       for(let d=0; d<5; d++){
         const cell = document.createElement('td');
@@ -591,7 +596,7 @@
     currentViewBooking = b;
     vRoom.textContent = b.room;
     vDate.textContent = b.date;
-    vSlot.textContent = b.slot + '. økt';
+    vSlot.textContent = slotLabel(b.slot);
     vTeacher.textContent = b.teacher || '-';
     vTitle.textContent = b.title || '-';
     vDocId.textContent = b.id || (b.room + '__' + b.date + '__' + b.slot);
@@ -640,7 +645,7 @@
       const roomWeek = roomWeekKey(room, dateStr);
       return db.runTransaction(async function(tx){
         const snap = await tx.get(ref);
-        if(snap.exists){ throw new Error(room + ' ' + dateStr + ' ' + slot + '. økt er allerede booket.'); }
+        if(snap.exists){ throw new Error(room + ' ' + dateStr + ' ' + slotLabel(slot) + ' er allerede booket.'); }
         tx.set(ref, { id: docId, room: room, date: dateStr, slot: slot, teacher: teacher, title: title, roomWeek: roomWeek, createdAt: new Date().toISOString(), groupId: groupId || null });
       });
     };
@@ -715,7 +720,7 @@
 
   async function deleteCurrentBookingFor(b){
     if(!canDelete(b)) { alert('Du har ikke tilgang til å slette denne.'); return; }
-    const ok = await askConfirm('Slette booking for ' + b.room + ' – ' + b.date + ' – ' + b.slot + '. økt?');
+    const ok = await askConfirm('Slette booking for ' + b.room + ' – ' + b.date + ' – ' + slotLabel(b.slot) + '?');
     if(!ok) return;
     try{
       console.log('DELETE: start');
@@ -854,6 +859,8 @@
     assertEq(typeof deleteSeriesFor, 'function', 'deleteSeriesFor finnes');
     assertEq(typeof canDelete, 'function', 'canDelete finnes');
     assertEq(typeof openViewDialog, 'function', 'openViewDialog finnes');
+    // Ny test: slotLabel
+    assertEq(slotLabel(6), 'Ettermiddagsøkt (14:30–16:00)', 'slot 6 label');
   })();
 
   // INIT
