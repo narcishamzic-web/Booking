@@ -355,28 +355,47 @@
   };
 
   // === HJELPEFUNKSJONER ===
-  const fmtDate = (d) => d.toISOString().slice(0,10);
-  function mondayOfISOWeek(date){
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const day = d.getUTCDay() || 7; // 1-7 med 1=man
-    if(day !== 1) d.setUTCDate(d.getUTCDate() - (day - 1));
-    return new Date(d);
+// Alltid jobb med lokal dato kl 12:00 (unngår DST-problemer)
+function makeSafeDate(date){
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
+}
+
+// Format: YYYY-MM-DD (lokal tid)
+function fmtDate(d){
+  const year = d.getFullYear();
+  const month = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${year}-${month}-${day}`;
+}
+
+// Legg til dager (lokal, DST-sikker)
+function addDays(date, days){
+  const d = makeSafeDate(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+// Finn mandag i uka (lokal, ISO-standard)
+function mondayOfISOWeek(date){
+  const d = makeSafeDate(date);
+  const day = d.getDay() || 7; // 1=man, 7=søn
+  if(day !== 1){
+    d.setDate(d.getDate() - (day - 1));
   }
-  function addDays(date, days){
-    const d = new Date(date); d.setUTCDate(d.getUTCDate()+days); return d;
-  }
+  return d;
+}
   function getISOWeekNumber(date) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getDay() || 7;
+    d.setDate(d.getDate() + 4 - dayNum);
+    const yearStart = new Date(d.getFullYear(),0,1,12));
     return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
   }
   function getISOWeekYear(date){
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    return d.getUTCFullYear();
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getDay() || 7;
+    d.setDate(d.getDate() + 4 - dayNum);
+    return d.getFullYear();
   }
   function isoWeekKey(date){
     const week = String(getISOWeekNumber(date)).padStart(2,'0');
