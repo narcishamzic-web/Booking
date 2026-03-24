@@ -385,17 +385,17 @@ function mondayOfISOWeek(date){
   return d;
 }
   function getISOWeekNumber(date) {
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getDay() || 7;
-    d.setDate(d.getDate() + 4 - dayNum);
-    const yearStart = new Date(d.getFullYear(),0,1,12));
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1,12));
     return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
   }
   function getISOWeekYear(date){
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getDay() || 7;
-    d.setDate(d.getDate() + 4 - dayNum);
-    return d.getFullYear();
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    return d.getUTCFullYear();
   }
   function isoWeekKey(date){
     const week = String(getISOWeekNumber(date)).padStart(2,'0');
